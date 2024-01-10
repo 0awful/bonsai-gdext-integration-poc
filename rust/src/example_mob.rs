@@ -12,6 +12,7 @@ pub struct Mob {
     pub max_action_points: usize,
     pub alive: bool,
     pub bt: BT<EnemyNPC, BlackBoardData>,
+    pub animation_completed: bool,
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Clone, Debug, PartialEq)]
@@ -86,16 +87,21 @@ impl Mob {
         self.action_points = self.action_points.saturating_sub(1);
     }
     fn rest(&mut self) {
-        self.base()
-            .get_node_as::<AnimationPlayer>("AnimationPlayer")
-            .play_ex()
-            .name("sleep".into())
-            .done();
+        if self.animation_completed {
+            self.base()
+                .get_node_as::<AnimationPlayer>("AnimationPlayer")
+                .play_ex()
+                .name("sleep".into())
+                .done();
+            self.animation_completed = false;
+            let mut timer = self.base().get_tree().unwrap().create_timer(0.8).unwrap();
+            timer.connect(
+                "timeout".into(),
+                self.base().callable("animation_completed"),
+            );
+        }
         self.action_points = (self.action_points + 1).min(self.max_action_points);
-        println!(
-            "Rested for a while... Action points: {}",
-            self.action_points
-        );
+        println!("{}", self.action_points);
     }
     fn die(&mut self) {
         self.base()
@@ -115,16 +121,20 @@ impl Mob {
         self.alive
     }
     fn fully_rested(&self) -> bool {
-        self.action_points == self.max_action_points
+        self.action_points == self.max_action_points && self.animation_completed
     }
 
-    fn perform_action(&mut self, action: &str) {
+    #[func]
+    fn animation_completed(&mut self) {
         self.base()
             .get_node_as::<AnimationPlayer>("AnimationPlayer")
             .play_ex()
             .name("RESET".into())
             .done();
+        self.animation_completed = true;
+    }
 
+    fn perform_action(&mut self, action: &str) {
         if self.action_points > 0 {
             self.consume_action_point();
             println!(
@@ -169,6 +179,7 @@ impl ICharacterBody2D for Mob {
             action_points: 3,
             max_action_points: 3,
             alive: true,
+            animation_completed: true,
         };
     }
     fn ready(&mut self) {}
